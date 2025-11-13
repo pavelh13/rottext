@@ -3,125 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulace Černého Displeje 320x192</title>
-    <!-- Načtení Tailwind CSS -->
+    <title>Simulace Displeje 320x192 (WebGL)</title>
+    <!-- Načtení Tailwind CSS pro pozadí těla a základní styly -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Načtení Three.js pro WebGL rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* Nastavení fontu Inter pro celý dokument */
         body {
+            /* Absolutní černá podklad */
+            background-color: #000000;
             font-family: 'Inter', sans-serif;
-            /* Tmavé pozadí pro celou stránku - čistě černé */
-            background-color: #000000; 
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Zabrání rolování celé stránky */
         }
-
-        /* Vlastní třída pro dosažení velikosti 8px s mezerou 2px */
-        .text-micro {
-            font-size: 8px; /* Požadovaná výška textu 8px */
-            line-height: 10px; /* 8px výška + 2px mezera = 10px line-height */
-            color: #E2E8F0; /* Světlý text pro kontrast s tmavým pozadím "displeje" */
-        }
-
-        /* Kontejner simulující displej */
-        .display-container {
-            width: 320px; /* Pevná šířka */
-            height: 192px; /* Pevná výška */
-            background-color: #000000; /* Také čistě černé pro splynutí s pozadím */
-            /* Odstraněn rámeček pro minimalistický vzhled */
-            position: relative; 
-        }
-
-        /* Styl pro rolovací lištu */
-        .marquee-container {
-            width: 100%; 
-            overflow: hidden; 
-            white-space: nowrap; 
-            box-sizing: border-box; 
-        }
-
-        .marquee-text {
-            display: inline-block; 
-            animation: marquee 0s linear infinite; /* Animace se bude nastavovat JS */
-            padding-right: 320px; 
-        }
-
-        /* Keyframes pro animaci rolování */
-        @keyframes marquee {
-            0% { transform: translateX(0%); }
-            100% { transform: translateX(-100%); }
+        /* Kontejner pro WebGL canvas */
+        #webgl-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            /* Three.js canvas bude mít přesně 320x192 */
+            width: 320px;
+            height: 192px;
+            /* Zajištění, že se nic nevyleje mimo rozměr */
+            overflow: hidden;
         }
     </style>
 </head>
-<!-- Čistě černé pozadí těla, odstraněn padding -->
-<body class="bg-black min-h-screen p-0 m-0">
+<body class="bg-black">
 
-    <!-- Pevný kontejner displeje, umístěn v rohu (0,0) -->
-    <div class="display-container overflow-hidden fixed top-0 left-0">
-        
-        <!-- Vnitřní obsah displeje -->
-        <div class="p-1 text-micro">
-            <!-- Rolovací lišta pro první řádek -->
-            <div class="marquee-container">
-                <span id="scrollingText" class="marquee-text">
-                    [1] Návrh obvodu pro nízkopříkonový senzor teploty a vlhkosti. &nbsp;&nbsp;&nbsp;&nbsp;
-                </span>
-            </div>
-            
-            <!-- Ostatní text -->
-            <p>
-                [2] Projekt "Nano-Banana" v2.1.
-                <br>
-                [3] Poslední měření:
-            </p>
-            <div class="mt-1">
-                <!-- Ukázka dat s pevnou šířkou fontu -->
-                <pre style="font-family: monospace;" class="text-micro">
-Teplota: 21.5 C
-Vlhkost: 45.2 %
-Napeti:  3.3 V
-
-Status: OK (System stabilni)
-Cas: 2025/11/13 10:01:45
-Ulozeno: 1478 zaznamu
-Pamet: 87% volne
-</pre>
-            </div>
-
-            <!-- Text, který je částečně mimo displej a bude oříznut -->
-            <p class="mt-1">
-                Tento text je úmyslně delší, aby překročil pevně definovanou výšku 192px. Vše, co se nachází mimo tuto oblast, je striktně oříznuto.
-            </p>
-
-        </div>
-    </div>
+    <!-- Kontejner pro WebGL renderovací plátno -->
+    <div id="webgl-container"></div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const scrollingText = document.getElementById('scrollingText');
-            const textContent = scrollingText.textContent.trim();
+        // --- KONFIGURACE ---
+        const DISPLAY_WIDTH = 320;
+        const DISPLAY_HEIGHT = 192;
+        const FONT_SIZE = 8; // px
+        const LINE_HEIGHT = 10; // 8px font + 2px mezera = 10px
+        const SCROLL_SPEED_PX_PER_SEC = 50; // Rychlost rolování v pixelech za sekundu
+        const TEXT_COLOR = '#E2E8F0';
+        const BACKGROUND_COLOR = '#000000';
+        
+        // --- DATA ---
+        const STATIC_TEXT = [
+            // První řádek je animovaný, začíná od druhého indexu
+            "[2] Projekt \"Nano-Banana\" v2.1.",
+            "[3] Poslední měření:",
+            "Teplota: 21.5 C",
+            "Vlhkost: 45.2 %",
+            "Napeti:  3.3 V",
+            "Status: OK (System stabilni)",
+            "Cas: 2025/11/13 10:01:45",
+            "Ulozeno: 1478 zaznamu",
+            "Pamet: 87% volne",
+            "Tento text je úmyslně delší, aby překročil pevně definovanou výšku 192px. Vše, co se nachází mimo tuto oblast, je striktně oříznuto."
+        ];
+        const SCROLLING_TEXT_BASE = "[1] Návrh obvodu pro nízkopříkonový senzor teploty a vlhkosti.    ";
+        
+        let scene, camera, renderer, plane, canvas, ctx, texture;
+        let scrollOffset = 0; // Aktuální posun rolování
+        let lastTime = 0;
 
-            // Zdvojnásobíme obsah, aby byl plynulý přechod při opakování
-            scrollingText.textContent = textContent + textContent;
+        /**
+         * Inicializace Three.js scény a rendereru
+         */
+        function initWebGL() {
+            // 1. SCÉNA
+            scene = new THREE.Scene();
 
-            const speedPxPerSec = 16; // Požadovaná rychlost 50px/s
+            // 2. KAMERA (Ortografická pro 2D)
+            camera = new THREE.OrthographicCamera(
+                DISPLAY_WIDTH / - 2, 
+                DISPLAY_WIDTH / 2, 
+                DISPLAY_HEIGHT / 2, 
+                DISPLAY_HEIGHT / - 2, 
+                1, 
+                1000
+            );
+            camera.position.z = 1; // Posuneme kameru zpět, aby viděla rovinu
+
+            // 3. RENDERER
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+            renderer.setClearColor(BACKGROUND_COLOR, 1);
             
-            // Poznámka: Musíme počkat, než prohlížeč přepočítá šířku po zdvojnásobení textu.
-            // Použijeme setTimeout, abychom dali prohlížeči čas.
-            setTimeout(() => {
-                // Šířka jednoho bloku textu
-                const textWidth = scrollingText.scrollWidth / 2; 
+            const container = document.getElementById('webgl-container');
+            container.appendChild(renderer.domElement);
+            
+            // 4. TEXTURA A ROVINA
+            initTextCanvas();
 
-                // Vypočítáme dobu trvání animace: Čas = Vzdálenost / Rychlost
-                const duration = textWidth / speedPxPerSec; // Sekundy
+            // Geometrie roviny, která se roztáhne přes celou obrazovku
+            const geometry = new THREE.PlaneGeometry(DISPLAY_WIDTH, DISPLAY_HEIGHT); 
+            // Materiál s naší texturou
+            const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
 
-                // Nastavíme animaci
-                scrollingText.style.animationDuration = `${duration}s`;
-            }, 0); 
-        });
+            // Rovina umístěná uprostřed kamery (0, 0)
+            plane = new THREE.Mesh(geometry, material);
+            scene.add(plane);
+        }
+
+        /**
+         * Inicializuje interní 2D Canvas pro textury
+         */
+        function initTextCanvas() {
+            canvas = document.createElement('canvas');
+            canvas.width = DISPLAY_WIDTH;
+            canvas.height = DISPLAY_HEIGHT;
+            ctx = canvas.getContext('2d');
+            
+            // Vytvoření textury z plátna
+            texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+        }
+
+        /**
+         * Vykreslí veškerý obsah na interní 2D plátno
+         */
+        function drawTextContent() {
+            // Vyčistit pozadí (černá)
+            ctx.fillStyle = BACKGROUND_COLOR;
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Nastavení stylu písma
+            ctx.font = `${FONT_SIZE}px 'Inter', monospace`; 
+            ctx.fillStyle = TEXT_COLOR;
+            ctx.textBaseline = 'top';
+
+            // --- Vykreslení statického textu ---
+            STATIC_TEXT.forEach((line, index) => {
+                // Vypočítáme Y pozici (začíná od druhého řádku, index 1)
+                const y = (index + 1) * LINE_HEIGHT + 1; // +1 pro malý offset z původního kódu
+                ctx.fillText(line, 4, y); // Malý X offset
+            });
+            
+            // --- Vykreslení rolovacího textu ---
+            
+            // Text je zdvojený pro plynulou smyčku
+            const scrollingTextContent = SCROLLING_TEXT_BASE + SCROLLING_TEXT_BASE;
+            
+            // Změříme šířku textu
+            const textMetrics = ctx.measureText(SCROLLING_TEXT_BASE);
+            const textWidth = textMetrics.width;
+
+            // Vypočítáme aktuální posun a zajistíme smyčku
+            // scrollOffset je záporný pro pohyb doleva
+            const currentScrollX = scrollOffset % textWidth; 
+
+            // Vykreslíme text s aktuálním posunem. Y pozice je pro první řádek.
+            ctx.fillText(scrollingTextContent, 4 + currentScrollX, 1);
+            
+            // Označíme texturu jako aktualizovanou pro Three.js
+            texture.needsUpdate = true; 
+        }
+
+        /**
+         * Hlavní animační smyčka (Game Loop)
+         */
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            if (lastTime !== 0) {
+                const delta = (time - lastTime) / 1000; // Čas v sekundách od posledního snímku
+                
+                // Aktualizace posunu rolování (50px/sec * delta_cas)
+                // Posun je záporný, protože se posouvá doleva
+                scrollOffset -= SCROLL_SPEED_PX_PER_SEC * delta; 
+            }
+            lastTime = time;
+
+            // 1. Aktualizace obsahu (text + rolování)
+            drawTextContent();
+
+            // 2. Renderování WebGL scény
+            renderer.render(scene, camera);
+        }
+
+        // --- Spuštění po načtení okna ---
+        window.onload = function () {
+            try {
+                initWebGL();
+                animate(0); // Spustit animační smyčku
+            } catch (e) {
+                const container = document.getElementById('webgl-container');
+                container.innerHTML = `<div style="color: white; padding: 20px;">
+                    Chyba při inicializaci WebGL: ${e.message}.
+                    Webová aplikace vyžaduje podporu WebGL.
+                </div>`;
+                console.error("WebGL initialization failed:", e);
+            }
+        };
+
     </script>
 
 </body>
 </html>
-
-
-
