@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulace Černého Displeje 320x192</title>
+    <!-- Načtení Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Nastavení fontu Inter pro celý dokument */
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Tmavé pozadí pro celou stránku - čistě černé */
+            background-color: #000000; 
+        }
+
+        /* Vlastní třída pro dosažení velikosti 8px s mezerou 2px */
+        .text-micro {
+            font-size: 8px; /* Požadovaná výška textu 8px */
+            line-height: 10px; /* 8px výška + 2px mezera = 10px line-height */
+            color: #E2E8F0; /* Světlý text pro kontrast s tmavým pozadím "displeje" */
+        }
+
+        /* Kontejner simulující displej */
+        .display-container {
+            width: 320px; /* Pevná šířka */
+            height: 192px; /* Pevná výška */
+            background-color: #000000; /* Také čistě černé pro splynutí s pozadím */
+            /* Odstraněn rámeček pro minimalistický vzhled */
+            position: relative; 
+        }
+
+        /* Styl pro rolovací lištu */
+        .marquee-container {
+            width: 100%; 
+            overflow: hidden; 
+            white-space: nowrap; 
+            box-sizing: border-box; 
+        }
+
+        .marquee-text {
+            display: inline-block; 
+            animation: marquee 0s linear infinite; /* Animace se bude nastavovat JS */
+            padding-right: 320px; 
+        }
+
+        /* Keyframes pro animaci rolování */
+        @keyframes marquee {
+            0% { transform: translateX(0%); }
+            100% { transform: translateX(-100%); }
+        }
+    </style>
+</head>
+<!-- Čistě černé pozadí těla, odstraněn padding -->
+<body class="bg-black min-h-screen p-0 m-0">
+
+    <!-- Pevný kontejner displeje, umístěn v rohu (0,0) -->
+    <div class="display-container overflow-hidden fixed top-0 left-0">
+        
+        <!-- Vnitřní obsah displeje -->
+        <div class="p-1 text-micro">
+            <!-- Rolovací lišta pro první řádek -->
+            <div class="marquee-container">
+                <span id="scrollingText" class="marquee-text">
+                    [1] Návrh obvodu pro nízkopříkonový senzor teploty a vlhkosti. &nbsp;&nbsp;&nbsp;&nbsp;
+                </span>
+            </div>
+            
+            <!-- Ostatní text -->
+            <p>
+                [2] Projekt "Nano-Banana" v2.1.
+                <br>
+                [3] Poslední měření:
+            </p>
+            <div class="mt-1">
+                <!-- Ukázka dat s pevnou šířkou fontu -->
+                <pre style="font-family: monospace;" class="text-micro">
+Teplota: 21.5 C
+Vlhkost: 45.2 %
+Napeti:  3.3 V
+
+Status: OK (System stabilni)
+Cas: 2025/11/13 10:01:45
+Ulozeno: 1478 zaznamu
+Pamet: 87% volne
+</pre>
+            </div>
+
+            <!-- Text, který je částečně mimo displej a bude oříznut -->
+            <p class="mt-1">
+                Tento text je úmyslně delší, aby překročil pevně definovanou výšku 192px. Vše, co se nachází mimo tuto oblast, je striktně oříznuto.
+            </p>
+
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scrollingText = document.getElementById('scrollingText');
+            const textContent = scrollingText.textContent.trim();
+
+            // Zdvojnásobíme obsah, aby byl plynulý přechod při opakování
+            scrollingText.textContent = textContent + textContent;
+
+            const speedPxPerSec = 50; // Požadovaná rychlost 50px/s
+            
+            // Poznámka: Musíme počkat, než prohlížeč přepočítá šířku po zdvojnásobení textu.
+            // Použijeme setTimeout, abychom dali prohlížeči čas.
+            setTimeout(() => {
+                // Šířka jednoho bloku textu
+                const textWidth = scrollingText.scrollWidth / 2; 
+
+                // Vypočítáme dobu trvání animace: Čas = Vzdálenost / Rychlost
+                const duration = textWidth / speedPxPerSec; // Sekundy
+
+                // Nastavíme animaci
+                scrollingText.style.animationDuration = `${duration}s`;
+            }, 0); 
+        });
+    </script>
+
+</body>
+</html>
